@@ -11,6 +11,9 @@ import {
   Trash2,
   ImagePlus,
   Loader2,
+  Search,
+  X,
+  Eye,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -50,6 +53,7 @@ type OrderItem = {
   name: string;
   price: number;
   quantity: number;
+  variant_options?: Record<string, string> | null;
 };
 
 type Order = {
@@ -73,8 +77,6 @@ const BLANK_PRODUCT = {
   compareAtPrice: 0,
   shortDescription: "",
   description: "",
-  // ingredients: "",
-  // howToUse: "",
   inventory: 10,
   image: "/lipstick_matte.png",
   badge: "",
@@ -205,6 +207,14 @@ export default function AdminPortal() {
   const [selectedProduct, setSelectedProduct] =
     useState<Product | null>(null);
 
+  // =========================================================
+  // ORDER UI
+  // =========================================================
+
+  const [orderSearch, setOrderSearch] = useState("");
+  const [selectedOrder, setSelectedOrder] =
+    useState<Order | null>(null);
+
   const [productForm, setProductForm] = useState({
     ...BLANK_PRODUCT,
   });
@@ -267,8 +277,7 @@ export default function AdminPortal() {
           image: p.image,
           isPublished: p.is_published,
           shortDescription: p.short_description,
-              description: p.description,   // ADD THIS
-
+          description: p.description,
         }))
       );
     }
@@ -302,7 +311,18 @@ export default function AdminPortal() {
           status: o.status,
           checkoutMethod: o.checkout_method,
           created_at: o.created_at,
-          order_items: o.order_items || [],
+          order_items: (o.order_items || []).map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            price: Number(item.price) || 0,
+            quantity: Number(item.quantity) || 0,
+            variant_options:
+              item.variant_options &&
+              typeof item.variant_options === "object"  &&
+    !Array.isArray(item.variant_options)
+      ? item.variant_options
+      : {},
+          })),
         }))
       );
     }
@@ -357,52 +377,164 @@ export default function AdminPortal() {
   }, []);
 
   // =========================================================
+  // ORDER HELPERS
+  // =========================================================
+
+  const formatVariantOptions = (
+    options?: Record<string, string> | null
+  ) => {
+    if (!options || typeof options !== "object") {
+      return "";
+    }
+
+    return Object.entries(options)
+      .filter(
+        ([, value]) =>
+          value !== undefined &&
+          value !== null &&
+          String(value).trim() !== ""
+      )
+      .map(([key, value]) => `${key}: ${value}`)
+      .join(" / ");
+  };
+
+  const formatOrderDate = (date: string) => {
+    if (!date) return "—";
+
+    const parsed = new Date(date);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return date;
+    }
+
+    return parsed.toLocaleString("en-PK", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  };
+
+  const filteredOrders = orders.filter((order) => {
+    const query = orderSearch.trim().toLowerCase();
+
+    if (!query) return true;
+
+    const variantText = order.order_items
+      .map((item) => formatVariantOptions(item.variant_options))
+      .join(" ");
+
+    const productText = order.order_items
+      .map((item) => item.name)
+      .join(" ");
+
+    const searchableText = [
+      order.id,
+      order.customerName,
+      order.phone,
+      order.address,
+      order.city,
+      order.checkoutMethod,
+      order.status,
+      productText,
+      variantText,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return searchableText.includes(query);
+  });
+
+  // =========================================================
   // IMAGE HANDLERS
   // =========================================================
 
-    const handleAddImageSelect = (
+  const handleAddImageSelect = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
+
       setAddImageFiles((prev) => [...prev, ...files]);
-      const previews = files.map((file) => URL.createObjectURL(file));
-      setAddImagePreviews((prev) => [...prev, ...previews]);
+
+      const previews = files.map((file) =>
+        URL.createObjectURL(file)
+      );
+
+      setAddImagePreviews((prev) => [
+        ...prev,
+        ...previews,
+      ]);
     }
   };
 
-
-    const handleEditImageSelect = (
+  const handleEditImageSelect = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      setEditImageFiles((prev) => [...prev, ...files]);
-      const previews = files.map((file) => URL.createObjectURL(file));
-      setEditImagePreviews((prev) => [...prev, ...previews]);
+
+      setEditImageFiles((prev) => [
+        ...prev,
+        ...files,
+      ]);
+
+      const previews = files.map((file) =>
+        URL.createObjectURL(file)
+      );
+
+      setEditImagePreviews((prev) => [
+        ...prev,
+        ...previews,
+      ]);
     }
   };
 
-  const removeAddImage = (index: number, e: React.MouseEvent) => {
+  const removeAddImage = (
+    index: number,
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation();
-    setAddImageFiles((prev) => prev.filter((_, i) => i !== index));
-    setAddImagePreviews((prev) => prev.filter((_, i) => i !== index));
+
+    setAddImageFiles((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
+
+    setAddImagePreviews((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
   };
 
-  const removeEditImage = (index: number, e: React.MouseEvent) => {
+  const removeEditImage = (
+    index: number,
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation();
-    setEditImageFiles((prev) => prev.filter((_, i) => i !== index));
-    setEditImagePreviews((prev) => prev.filter((_, i) => i !== index));
+
+    setEditImageFiles((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
+
+    setEditImagePreviews((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
   };
 
-  const removeExistingEditImage = (urlToRemove: string, e: React.MouseEvent) => {
+  const removeExistingEditImage = (
+    urlToRemove: string,
+    e: React.MouseEvent
+  ) => {
     e.stopPropagation();
+
     if (selectedProduct && selectedProduct.image) {
-      const images = selectedProduct.image.split(',').filter(url => url !== urlToRemove);
-      setSelectedProduct({ ...selectedProduct, image: images.join(',') });
+      const images = selectedProduct.image
+        .split(",")
+        .filter((url) => url !== urlToRemove);
+
+      setSelectedProduct({
+        ...selectedProduct,
+        image: images.join(","),
+      });
     }
   };
-
 
   // =========================================================
   // RESET ADD
@@ -512,8 +644,11 @@ export default function AdminPortal() {
         group.id === groupId
           ? {
               ...group,
-              options: group.options.map((option, index) =>
-                index === optionIndex ? value : option
+              options: group.options.map(
+                (option, index) =>
+                  index === optionIndex
+                    ? value
+                    : option
               ),
             }
           : group
@@ -567,7 +702,9 @@ export default function AdminPortal() {
       return;
     }
 
-    const names = validGroups.map((group) => group.name);
+    const names = validGroups.map(
+      (group) => group.name
+    );
 
     if (new Set(names).size !== names.length) {
       alert("Variant group names must be unique.");
@@ -593,11 +730,12 @@ export default function AdminPortal() {
 
     const generated: VariantCombination[] =
       combinations.map((options) => {
-        const existing = variantCombinations.find(
-          (variant) =>
-            getVariantKey(variant.options) ===
-            getVariantKey(options)
-        );
+        const existing =
+          variantCombinations.find(
+            (variant) =>
+              getVariantKey(variant.options) ===
+              getVariantKey(options)
+          );
 
         if (existing) {
           return existing;
@@ -605,7 +743,8 @@ export default function AdminPortal() {
 
         return {
           options,
-          price: Number(productForm.price) || 0,
+          price:
+            Number(productForm.price) || 0,
           compareAtPrice:
             Number(productForm.compareAtPrice) || 0,
           inventory:
@@ -625,7 +764,8 @@ export default function AdminPortal() {
     index: number,
     file: File
   ) => {
-    const imageUrl = await uploadProductImage(file);
+    const imageUrl =
+      await uploadProductImage(file);
 
     if (!imageUrl) {
       alert("Failed to upload variant image.");
@@ -688,10 +828,15 @@ export default function AdminPortal() {
       .from("product_variants")
       .select("*")
       .eq("product_id", String(product.id))
-      .order("created_at", { ascending: true });
+      .order("created_at", {
+        ascending: true,
+      });
 
     if (error) {
-      console.error("Variant fetch error:", error);
+      console.error(
+        "Variant fetch error:",
+        error
+      );
       return;
     }
 
@@ -699,7 +844,10 @@ export default function AdminPortal() {
       return;
     }
 
-    const groupsMap = new Map<string, Set<string>>();
+    const groupsMap = new Map<
+      string,
+      Set<string>
+    >();
 
     const combinations: VariantCombination[] =
       data.map((variant: any) => {
@@ -712,7 +860,10 @@ export default function AdminPortal() {
         Object.entries(options).forEach(
           ([name, value]) => {
             if (!groupsMap.has(name)) {
-              groupsMap.set(name, new Set());
+              groupsMap.set(
+                name,
+                new Set()
+              );
             }
 
             groupsMap
@@ -724,496 +875,597 @@ export default function AdminPortal() {
         return {
           id: variant.id,
           options,
-          price: Number(variant.price) || 0,
+          price:
+            Number(variant.price) || 0,
           compareAtPrice:
-            Number(variant.compare_at_price) || 0,
+            Number(
+              variant.compare_at_price
+            ) || 0,
           inventory:
             Number(variant.inventory) || 0,
-          image: variant.image || "",
+          image:
+            variant.image || "",
         };
       });
 
-    const groups: VariantGroup[] = Array.from(
-      groupsMap.entries()
-    ).map(([name, options]) => ({
-      id: crypto.randomUUID(),
-      name,
-      options: Array.from(options),
-    }));
+    const groups: VariantGroup[] =
+      Array.from(
+        groupsMap.entries()
+      ).map(
+        ([name, options]) => ({
+          id: crypto.randomUUID(),
+          name,
+          options:
+            Array.from(options),
+        })
+      );
 
     setVariantGroups(groups);
-    setVariantCombinations(combinations);
+    setVariantCombinations(
+      combinations
+    );
   };
 
- // =========================================================
-// ADD PRODUCT
-// =========================================================
+  // =========================================================
+  // ADD PRODUCT
+  // =========================================================
 
-const handleAddProduct = async () => {
-  if (!productForm.name.trim()) {
-    alert("Please enter a product name.");
-    return;
-  }
+  const handleAddProduct = async () => {
+    if (!productForm.name.trim()) {
+      alert("Please enter a product name.");
+      return;
+    }
 
-  if (
-    productForm.compareAtPrice > 0 &&
-    productForm.price > productForm.compareAtPrice
-  ) {
-    alert(
-      "Price After Discount cannot be greater than Actual Price."
-    );
-    return;
-  }
+    if (
+      productForm.compareAtPrice > 0 &&
+      productForm.price >
+        productForm.compareAtPrice
+    ) {
+      alert(
+        "Price After Discount cannot be greater than Actual Price."
+      );
+      return;
+    }
 
-  // IMPORTANT:
-  // Capture variants before any async image uploads
-  const variantsToSave = [...variantCombinations];
-  console.log("========== ADD PRODUCT DEBUG ==========");
-console.log("Variant combinations:", variantCombinations);
-console.log("Variants to save:", variantsToSave);
-console.log("Number of variants:", variantsToSave.length);
-console.log("Add image files:", addImageFiles);
-console.log("========================================");
+    const variantsToSave = [
+      ...variantCombinations,
+    ];
 
-  let imageUrl = productForm.image || "";
+    let imageUrl =
+      productForm.image || "";
 
-  // =====================================================
-  // UPLOAD PRODUCT IMAGES
-  // =====================================================
+    if (addImageFiles.length > 0) {
+      setAddUploading(true);
 
-  if (addImageFiles.length > 0) {
-    setAddUploading(true);
+      const uploadedUrls: string[] = [];
 
-    const uploadedUrls: string[] = [];
+      for (const file of addImageFiles) {
+        const uploadedUrl =
+          await uploadProductImage(file);
 
-    for (const file of addImageFiles) {
-      const uploadedUrl = await uploadProductImage(file);
+        if (uploadedUrl) {
+          uploadedUrls.push(
+            uploadedUrl
+          );
+        }
+      }
 
-      if (uploadedUrl) {
-        uploadedUrls.push(uploadedUrl);
+      setAddUploading(false);
+
+      if (uploadedUrls.length === 0) {
+        alert("Image uploads failed.");
+        return;
+      }
+
+      imageUrl =
+        uploadedUrls.join(",");
+    }
+
+    const { data, error } =
+      await supabase
+        .from("products")
+        .insert([
+          {
+            name: productForm.name,
+            category:
+              productForm.category,
+            subcategory:
+              productForm.subcategory,
+            price:
+              productForm.price,
+            compare_at_price:
+              productForm.compareAtPrice,
+            short_description:
+              productForm.shortDescription,
+            description:
+              productForm.description,
+            inventory:
+              productForm.inventory,
+            image: imageUrl,
+            badge: productForm.badge,
+            is_published:
+              productForm.isPublished,
+          },
+        ])
+        .select()
+        .single();
+
+    if (error || !data) {
+      console.error(
+        "Add product error:",
+        error
+      );
+
+      alert(
+        "Error saving product: " +
+          (error?.message ||
+            "Unknown error.")
+      );
+
+      return;
+    }
+
+    if (variantsToSave.length > 0) {
+      const variantRows =
+        variantsToSave.map(
+          (variant) => ({
+            product_id:
+              String(data.id),
+            options:
+              variant.options,
+            price:
+              variant.price,
+            compare_at_price:
+              variant.compareAtPrice,
+            inventory:
+              variant.inventory,
+            image:
+              variant.image ||
+              null,
+          })
+        );
+
+      const {
+        error: variantError,
+      } = await supabase
+        .from("product_variants")
+        .insert(
+          variantRows
+        );
+
+      if (variantError) {
+        console.error(
+          "Variant save error:",
+          variantError
+        );
+
+        await supabase
+          .from("products")
+          .delete()
+          .eq(
+            "id",
+            data.id
+          );
+
+        alert(
+          "Product was not saved because variants could not be saved: " +
+            variantError.message
+        );
+
+        return;
       }
     }
 
-    setAddUploading(false);
-
-    if (uploadedUrls.length === 0) {
-      alert("Image uploads failed.");
-      return;
-    }
-
-    // Store multiple images as comma-separated URLs
-    imageUrl = uploadedUrls.join(",");
-  }
-
-  // =====================================================
-  // SAVE MAIN PRODUCT
-  // =====================================================
-
-  const { data, error } = await supabase
-    .from("products")
-    .insert([
+    setProducts((prev) => [
       {
-        name: productForm.name,
-        category: productForm.category,
-        subcategory: productForm.subcategory,
-        price: productForm.price,
-        compare_at_price: productForm.compareAtPrice,
-        short_description: productForm.shortDescription,
-        description: productForm.description,
-        // ingredients: productForm.ingredients,
-        // how_to_use: productForm.howToUse,
-        inventory: productForm.inventory,
-        image: imageUrl,
-        badge: productForm.badge,
-        is_published: productForm.isPublished,
+        id: data.id,
+        name: data.name,
+        category:
+          data.category,
+        subcategory:
+          data.subcategory,
+        price:
+          Number(data.price) ||
+          0,
+        compareAtPrice:
+          Number(
+            data.compare_at_price
+          ) || 0,
+        inventory:
+          Number(data.inventory) ||
+          0,
+        image:
+          data.image,
+        isPublished:
+          data.is_published,
+        shortDescription:
+          data.short_description,
+        description:
+          data.description,
       },
-    ])
-    .select()
-    .single();
-if (error || !data) {
-  console.error("Add product error:", {
-    message: error?.message,
-    details: error?.details,
-    hint: error?.hint,
-    code: error?.code,
-  });
+      ...prev,
+    ]);
 
-  alert(
-    "Error saving product: " +
-      (error?.message || error?.details || error?.hint || "Unknown error. Check Supabase connection.")
-  );
-  return;
-}
-  // =====================================================
-  // SAVE VARIANTS
-  // =====================================================
+    resetAddModalState();
+    setShowAddModal(false);
+  };
 
-  if (variantsToSave.length > 0) {
-    const variantRows = variantsToSave.map((variant) => ({
-      product_id: String(data.id),
-      options: variant.options,
-      price: variant.price,
-      compare_at_price: variant.compareAtPrice,
-      inventory: variant.inventory,
-      image: variant.image || null,
-    }));
-
-    console.log("VARIANTS BEING SAVED:", variantRows);
-
-    const { error: variantError } = await supabase
-      .from("product_variants")
-      .insert(variantRows);
-
-    if (variantError) {
-      console.error(
-        "Variant save error:",
-        variantError
-      );
-      
-
-      // Roll back product if variants fail
-      await supabase
-        .from("products")
-        .delete()
-        .eq("id", data.id);
-
-      alert(
-        "Product was not saved because variants could not be saved: " +
-          variantError.message
-      );
-
-      return;
-    }
-  }
-
-  // =====================================================
-  // UPDATE LOCAL PRODUCT LIST
-  // =====================================================
-
-  setProducts((prev) => [
-    {
-      id: data.id,
-      name: data.name,
-      category: data.category,
-      subcategory: data.subcategory,
-      price: Number(data.price) || 0,
-      compareAtPrice:
-        Number(data.compare_at_price) || 0,
-      inventory: Number(data.inventory) || 0,
-      image: data.image,
-      isPublished: data.is_published,
-      shortDescription:
-        data.short_description,
-    },
-    ...prev,
-  ]);
-
-  resetAddModalState();
-  setShowAddModal(false);
-};
   // =========================================================
   // UPDATE PRODUCT
   // =========================================================
 
- // =========================================================
-// UPDATE PRODUCT
-// =========================================================
+  const handleUpdateProduct =
+    async () => {
+      if (!selectedProduct)
+        return;
 
-const handleUpdateProduct = async () => {
-  if (!selectedProduct) return;
-
-  if (
-    selectedProduct.compareAtPrice &&
-    selectedProduct.compareAtPrice > 0 &&
-    selectedProduct.price >
-      selectedProduct.compareAtPrice
-  ) {
-    alert(
-      "Price After Discount cannot be greater than Actual Price."
-    );
-    return;
-  }
-
-  // IMPORTANT:
-  // Capture variants before any async image uploads
-  const variantsToSave = [...variantCombinations];
-
-  let imageUrl = selectedProduct.image || "";
-
-  // =====================================================
-  // UPLOAD NEW PRODUCT IMAGES
-  // =====================================================
-
-  if (editImageFiles.length > 0) {
-    setEditUploading(true);
-
-    const uploadedUrls: string[] = [];
-
-    for (const file of editImageFiles) {
-      const uploadedUrl = await uploadProductImage(file);
-
-      if (uploadedUrl) {
-        uploadedUrls.push(uploadedUrl);
+      if (
+        selectedProduct.compareAtPrice &&
+        selectedProduct.compareAtPrice >
+          0 &&
+        selectedProduct.price >
+          selectedProduct.compareAtPrice
+      ) {
+        alert(
+          "Price After Discount cannot be greater than Actual Price."
+        );
+        return;
       }
-    }
 
-    setEditUploading(false);
+      const variantsToSave = [
+        ...variantCombinations,
+      ];
 
-    if (uploadedUrls.length === 0) {
-      alert("Image uploads failed.");
-      return;
-    }
+      let imageUrl =
+        selectedProduct.image || "";
 
-    // Keep existing images + add new images
-    const existingUrls = imageUrl
-      ? imageUrl.split(",").filter(Boolean)
-      : [];
+      if (
+        editImageFiles.length > 0
+      ) {
+        setEditUploading(true);
 
-    imageUrl = [
-      ...existingUrls,
-      ...uploadedUrls,
-    ].join(",");
-  }
+        const uploadedUrls: string[] =
+          [];
 
-  // =====================================================
-  // UPDATE MAIN PRODUCT
-  // =====================================================
+        for (const file of editImageFiles) {
+          const uploadedUrl =
+            await uploadProductImage(
+              file
+            );
 
-  const { error } = await supabase
-    .from("products")
-    .update({
-      name: selectedProduct.name,
-      price: selectedProduct.price,
-      compare_at_price:
-        selectedProduct.compareAtPrice ?? 0,
-      inventory:
-        selectedProduct.inventory ?? 0,
-      image: imageUrl,
-      subcategory:
-        selectedProduct.subcategory,
-            description: selectedProduct.description ?? "",   // ADD THIS
+          if (uploadedUrl) {
+            uploadedUrls.push(
+              uploadedUrl
+            );
+          }
+        }
 
-    })
-    .eq("id", selectedProduct.id);
+        setEditUploading(false);
 
-  if (error) {
-    alert(
-      "Error updating product: " +
-        error.message
-    );
+        if (
+          uploadedUrls.length ===
+          0
+        ) {
+          alert(
+            "Image uploads failed."
+          );
+          return;
+        }
 
-    console.error(
-      "Update product error:",
-      error
-    );
+        const existingUrls =
+          imageUrl
+            ? imageUrl
+                .split(",")
+                .filter(Boolean)
+            : [];
 
-    return;
-  }
+        imageUrl = [
+          ...existingUrls,
+          ...uploadedUrls,
+        ].join(",");
+      }
 
-  // =====================================================
-  // DELETE OLD VARIANTS
-  // =====================================================
+      const { error } =
+        await supabase
+          .from("products")
+          .update({
+            name:
+              selectedProduct.name,
+            price:
+              selectedProduct.price,
+            compare_at_price:
+              selectedProduct.compareAtPrice ??
+              0,
+            inventory:
+              selectedProduct.inventory ??
+              0,
+            image:
+              imageUrl,
+            subcategory:
+              selectedProduct.subcategory,
+            description:
+              selectedProduct.description ??
+              "",
+          })
+          .eq(
+            "id",
+            selectedProduct.id
+          );
 
-  const {
-    error: deleteVariantError,
-  } = await supabase
-    .from("product_variants")
-    .delete()
-    .eq(
-      "product_id",
-      String(selectedProduct.id)
-    );
+      if (error) {
+        alert(
+          "Error updating product: " +
+            error.message
+        );
 
-  if (deleteVariantError) {
-    alert(
-      "Product updated, but old variants could not be removed: " +
-        deleteVariantError.message
-    );
+        console.error(
+          "Update product error:",
+          error
+        );
 
-    console.error(
-      "Delete variants error:",
-      deleteVariantError
-    );
+        return;
+      }
 
-    return;
-  }
+      const {
+        error:
+          deleteVariantError,
+      } = await supabase
+        .from("product_variants")
+        .delete()
+        .eq(
+          "product_id",
+          String(
+            selectedProduct.id
+          )
+        );
 
-  // =====================================================
-  // INSERT UPDATED VARIANTS
-  // =====================================================
+      if (deleteVariantError) {
+        alert(
+          "Product updated, but old variants could not be removed: " +
+            deleteVariantError.message
+        );
 
-  if (variantsToSave.length > 0) {
-    const variantRows = variantsToSave.map(
-      (variant) => ({
-        product_id: String(
+        console.error(
+          "Delete variants error:",
+          deleteVariantError
+        );
+
+        return;
+      }
+
+      if (
+        variantsToSave.length >
+        0
+      ) {
+        const variantRows =
+          variantsToSave.map(
+            (variant) => ({
+              product_id:
+                String(
+                  selectedProduct.id
+                ),
+              options:
+                variant.options,
+              price:
+                variant.price,
+              compare_at_price:
+                variant.compareAtPrice,
+              inventory:
+                variant.inventory,
+              image:
+                variant.image ||
+                null,
+            })
+          );
+
+        const {
+          error: variantError,
+        } = await supabase
+          .from(
+            "product_variants"
+          )
+          .insert(
+            variantRows
+          );
+
+        if (variantError) {
+          alert(
+            "Product updated, but variants could not be saved: " +
+              variantError.message
+          );
+
+          console.error(
+            "Variant update error:",
+            variantError
+          );
+
+          return;
+        }
+      }
+
+      const updated: Product =
+        {
+          ...selectedProduct,
+          price:
+            selectedProduct.price,
+          compareAtPrice:
+            selectedProduct.compareAtPrice ??
+            0,
+          inventory:
+            selectedProduct.inventory ??
+            0,
+          image:
+            imageUrl,
+          description:
+            selectedProduct.description ??
+            "",
+        };
+
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id ===
           selectedProduct.id
-        ),
-        options: variant.options,
-        price: variant.price,
-        compare_at_price:
-          variant.compareAtPrice,
-        inventory: variant.inventory,
-        image: variant.image || null,
-      })
-    );
-
-    console.log(
-      "VARIANTS BEING SAVED:",
-      variantRows
-    );
-
-    const {
-      error: variantError,
-    } = await supabase
-      .from("product_variants")
-      .insert(variantRows);
-
-    if (variantError) {
-      alert(
-        "Product updated, but variants could not be saved: " +
-          variantError.message
+            ? updated
+            : p
+        )
       );
 
-      console.error(
-        "Variant update error:",
-        variantError
-      );
+      resetEditModalState();
 
-      return;
-    }
-  }
+      setVariantGroups([]);
+      setVariantCombinations([]);
 
-  // =====================================================
-  // UPDATE LOCAL STATE
-  // =====================================================
+      setShowEditModal(false);
+    };
 
-  const updated: Product = {
-    ...selectedProduct,
-    price: selectedProduct.price,
-    compareAtPrice:
-      selectedProduct.compareAtPrice ?? 0,
-    inventory:
-      selectedProduct.inventory ?? 0,
-    image: imageUrl,
-      description: selectedProduct.description ?? "",   
-
-  };
-
-  setProducts((prev) =>
-    prev.map((p) =>
-      p.id === selectedProduct.id
-        ? updated
-        : p
-    )
-  );
-
-  resetEditModalState();
-
-  setVariantGroups([]);
-  setVariantCombinations([]);
-
-  setShowEditModal(false);
-};
   // =========================================================
   // DELETE PRODUCT
   // =========================================================
 
-  const handleDeleteProduct = async (
-    id: string
-  ) => {
-    if (!confirm("Delete this product?")) {
-      return;
-    }
+  const handleDeleteProduct =
+    async (id: string) => {
+      if (
+        !confirm(
+          "Delete this product?"
+        )
+      ) {
+        return;
+      }
 
-    // Delete variants first
-    const {
-      error: variantDeleteError,
-    } = await supabase
-      .from("product_variants")
-      .delete()
-      .eq("product_id", String(id));
+      const {
+        error:
+          variantDeleteError,
+      } = await supabase
+        .from("product_variants")
+        .delete()
+        .eq(
+          "product_id",
+          String(id)
+        );
 
-    if (variantDeleteError) {
-      alert(
-        "Could not delete product variants: " +
-          variantDeleteError.message
-      );
+      if (variantDeleteError) {
+        alert(
+          "Could not delete product variants: " +
+            variantDeleteError.message
+        );
 
-      console.error(
-        "Delete variants error:",
-        variantDeleteError
-      );
+        console.error(
+          "Delete variants error:",
+          variantDeleteError
+        );
 
-      return;
-    }
+        return;
+      }
 
-    // Delete main product
-    const { error } = await supabase
-      .from("products")
-      .delete()
-      .eq("id", id);
+      const { error } =
+        await supabase
+          .from("products")
+          .delete()
+          .eq(
+            "id",
+            id
+          );
 
-    if (!error) {
-      setProducts((prev) =>
-        prev.filter((p) => p.id !== id)
-      );
-    } else {
-      alert(
-        "Error deleting product: " +
-          error.message
-      );
+      if (!error) {
+        setProducts((prev) =>
+          prev.filter(
+            (p) => p.id !== id
+          )
+        );
+      } else {
+        alert(
+          "Error deleting product: " +
+            error.message
+        );
 
-      console.error(
-        "Delete product error:",
-        error
-      );
-    }
-  };
+        console.error(
+          "Delete product error:",
+          error
+        );
+      }
+    };
 
   // =========================================================
   // UPDATE ORDER STATUS
   // =========================================================
 
-  const handleUpdateOrderStatus = async (
-    id: string,
-    status: string
-  ) => {
-    const { error } = await supabase
-      .from("orders")
-      .update({ status })
-      .eq("id", id);
+  const handleUpdateOrderStatus =
+    async (
+      id: string,
+      status: string
+    ) => {
+      const { error } =
+        await supabase
+          .from("orders")
+          .update({
+            status,
+          })
+          .eq(
+            "id",
+            id
+          );
 
-    if (!error) {
+      if (error) {
+        console.error(
+          "Order status update error:",
+          error
+        );
+
+        alert(
+          "Could not update order status: " +
+            error.message
+        );
+
+        return;
+      }
+
       setOrders((prev) =>
         prev.map((o) =>
           o.id === id
-            ? { ...o, status }
+            ? {
+                ...o,
+                status,
+              }
             : o
         )
       );
-    }
-  };
+
+      setSelectedOrder((prev) =>
+        prev &&
+        prev.id === id
+          ? {
+              ...prev,
+              status,
+            }
+          : prev
+      );
+    };
 
   // =========================================================
   // METRICS
   // =========================================================
 
-  const totalRevenue = orders
-    .filter((o) =>
-      [
-        "Delivered",
-        "Shipped",
-        "Pending",
-      ].includes(o.status)
-    )
-    .reduce(
-      (sum, o) => sum + o.total,
-      0
-    );
+  const totalRevenue =
+    orders
+      .filter((o) =>
+        [
+          "Delivered",
+          "Shipped",
+          "Pending",
+        ].includes(o.status)
+      )
+      .reduce(
+        (sum, o) =>
+          sum + o.total,
+        0
+      );
 
-  const pendingCount = orders.filter(
-    (o) => o.status === "Pending"
-  ).length;
+  const pendingCount =
+    orders.filter(
+      (o) =>
+        o.status ===
+        "Pending"
+    ).length;
 
   // =========================================================
   // LOADING
@@ -1252,8 +1504,8 @@ const handleUpdateProduct = async () => {
           </h3>
 
           <p className="text-sm text-gray-500 mt-1">
-            Add dynamic options such as Shade, Size,
-            Color, Scent, Finish, etc.
+            Add dynamic options such as Shade,
+            Size, Color, Scent, Finish, etc.
           </p>
         </div>
 
@@ -1266,100 +1518,125 @@ const handleUpdateProduct = async () => {
         </button>
       </div>
 
-      {variantGroups.map((group) => (
-        <div
-          key={group.id}
-          className="border rounded-xl p-4 mb-4"
-        >
-          <div className="flex gap-3 mb-4">
-            <input
-              type="text"
-              value={group.name}
-              onChange={(e) =>
-                updateVariantGroupName(
-                  group.id,
-                  e.target.value
+      {variantGroups.map(
+        (group) => (
+          <div
+            key={group.id}
+            className="border rounded-xl p-4 mb-4"
+          >
+            <div className="flex gap-3 mb-4">
+              <input
+                type="text"
+                value={
+                  group.name
+                }
+                onChange={(e) =>
+                  updateVariantGroupName(
+                    group.id,
+                    e.target.value
+                  )
+                }
+                placeholder="Variant name e.g. Shade"
+                className="flex-1 border rounded-lg px-3 py-2 outline-none"
+              />
+
+              <button
+                type="button"
+                onClick={() =>
+                  removeVariantGroup(
+                    group.id
+                  )
+                }
+                className="px-3 text-red-500"
+              >
+                Remove
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {group.options.map(
+                (
+                  option,
+                  optionIndex
+                ) => (
+                  <div
+                    key={
+                      optionIndex
+                    }
+                    className="flex gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={
+                        option
+                      }
+                      onChange={(
+                        e
+                      ) =>
+                        updateVariantOption(
+                          group.id,
+                          optionIndex,
+                          e
+                            .target
+                            .value
+                        )
+                      }
+                      placeholder="Option e.g. Red"
+                      className="flex-1 border rounded-lg px-3 py-2 outline-none"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeVariantOption(
+                          group.id,
+                          optionIndex
+                        )
+                      }
+                      className="px-3 text-red-500"
+                    >
+                      ×
+                    </button>
+                  </div>
                 )
-              }
-              placeholder="Variant name e.g. Shade"
-              className="flex-1 border rounded-lg px-3 py-2 outline-none"
-            />
+              )}
+            </div>
 
             <button
               type="button"
               onClick={() =>
-                removeVariantGroup(group.id)
+                addVariantOption(
+                  group.id
+                )
               }
-              className="px-3 text-red-500"
+              className="mt-3 text-sm text-[#5B1A1A] font-medium"
             >
-              Remove
+              + Add Option
             </button>
           </div>
+        )
+      )}
 
-          <div className="space-y-2">
-            {group.options.map(
-              (option, optionIndex) => (
-                <div
-                  key={optionIndex}
-                  className="flex gap-2"
-                >
-                  <input
-                    type="text"
-                    value={option}
-                    onChange={(e) =>
-                      updateVariantOption(
-                        group.id,
-                        optionIndex,
-                        e.target.value
-                      )
-                    }
-                    placeholder="Option e.g. Red"
-                    className="flex-1 border rounded-lg px-3 py-2 outline-none"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      removeVariantOption(
-                        group.id,
-                        optionIndex
-                      )
-                    }
-                    className="px-3 text-red-500"
-                  >
-                    ×
-                  </button>
-                </div>
-              )
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              addVariantOption(group.id)
-            }
-            className="mt-3 text-sm text-[#5B1A1A] font-medium"
-          >
-            + Add Option
-          </button>
-        </div>
-      ))}
-
-      {variantGroups.length > 0 && (
+      {variantGroups.length >
+        0 && (
         <button
           type="button"
-          onClick={generateVariantCombinations}
+          onClick={
+            generateVariantCombinations
+          }
           className="w-full py-3 border border-[#5B1A1A] text-[#5B1A1A] rounded-lg font-medium hover:bg-[#5B1A1A] hover:text-white"
         >
-          Generate Variant Combinations
+          Generate Variant
+          Combinations
         </button>
       )}
 
-      {variantCombinations.length > 0 && (
+      {variantCombinations.length >
+        0 && (
         <div className="mt-6">
           <h4 className="font-semibold mb-4">
-            Variant Combinations
+            Variant
+            Combinations
           </h4>
 
           <div className="overflow-x-auto border rounded-xl">
@@ -1379,7 +1656,8 @@ const handleUpdateProduct = async () => {
                   </th>
 
                   <th className="text-left p-3">
-                    Price After Discount
+                    Price After
+                    Discount
                   </th>
 
                   <th className="text-left p-3">
@@ -1390,7 +1668,10 @@ const handleUpdateProduct = async () => {
 
               <tbody>
                 {variantCombinations.map(
-                  (variant, index) => (
+                  (
+                    variant,
+                    index
+                  ) => (
                     <tr
                       key={
                         variant.id ??
@@ -1405,17 +1686,24 @@ const handleUpdateProduct = async () => {
                           variant.options
                         )
                           .map(
-                            ([key, value]) =>
+                            ([
+                              key,
+                              value,
+                            ]) =>
                               `${key}: ${value}`
                           )
-                          .join(" / ")}
+                          .join(
+                            " / "
+                          )}
                       </td>
 
                       <td className="p-3">
                         <div className="flex items-center gap-2">
                           {variant.image ? (
                             <img
-                              src={variant.image}
+                              src={
+                                variant.image
+                              }
                               alt="Variant"
                               className="w-12 h-12 object-cover rounded-lg border"
                             />
@@ -1432,11 +1720,17 @@ const handleUpdateProduct = async () => {
                               type="file"
                               accept="image/*"
                               className="hidden"
-                              onChange={(e) => {
+                              onChange={(
+                                e
+                              ) => {
                                 const file =
-                                  e.target.files?.[0];
+                                  e
+                                    .target
+                                    .files?.[0];
 
-                                if (file) {
+                                if (
+                                  file
+                                ) {
                                   handleVariantImageUpload(
                                     index,
                                     file
@@ -1455,12 +1749,16 @@ const handleUpdateProduct = async () => {
                           value={
                             variant.compareAtPrice
                           }
-                          onChange={(e) =>
+                          onChange={(
+                            e
+                          ) =>
                             updateVariantCombination(
                               index,
                               "compareAtPrice",
                               Number(
-                                e.target.value
+                                e
+                                  .target
+                                  .value
                               )
                             )
                           }
@@ -1472,13 +1770,19 @@ const handleUpdateProduct = async () => {
                         <input
                           type="number"
                           min="0"
-                          value={variant.price}
-                          onChange={(e) =>
+                          value={
+                            variant.price
+                          }
+                          onChange={(
+                            e
+                          ) =>
                             updateVariantCombination(
                               index,
                               "price",
                               Number(
-                                e.target.value
+                                e
+                                  .target
+                                  .value
                               )
                             )
                           }
@@ -1490,13 +1794,19 @@ const handleUpdateProduct = async () => {
                         <input
                           type="number"
                           min="0"
-                          value={variant.inventory}
-                          onChange={(e) =>
+                          value={
+                            variant.inventory
+                          }
+                          onChange={(
+                            e
+                          ) =>
                             updateVariantCombination(
                               index,
                               "inventory",
                               Number(
-                                e.target.value
+                                e
+                                  .target
+                                  .value
                               )
                             )
                           }
@@ -1574,7 +1884,11 @@ const handleUpdateProduct = async () => {
               },
             ] as const
           ).map(
-            ({ id, label, icon: Icon }) => (
+            ({
+              id,
+              label,
+              icon: Icon,
+            }) => (
               <button
                 key={id}
                 onClick={() =>
@@ -1599,7 +1913,8 @@ const handleUpdateProduct = async () => {
 
           {/* DASHBOARD */}
 
-          {activeTab === "dashboard" && (
+          {activeTab ===
+            "dashboard" && (
             <div>
               <h1 className="text-2xl font-bold mb-6">
                 Dashboard
@@ -1644,7 +1959,8 @@ const handleUpdateProduct = async () => {
 
           {/* PRODUCTS */}
 
-          {activeTab === "products" && (
+          {activeTab ===
+            "products" && (
             <div>
 
               <div className="flex items-center justify-between mb-6">
@@ -1655,7 +1971,9 @@ const handleUpdateProduct = async () => {
                 <button
                   onClick={() => {
                     resetAddModalState();
-                    setShowAddModal(true);
+                    setShowAddModal(
+                      true
+                    );
                   }}
                   className="bg-[#5B1A1A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#7A2323] transition"
                 >
@@ -1667,194 +1985,398 @@ const handleUpdateProduct = async () => {
                 <p className="text-gray-400 text-sm animate-pulse">
                   Loading products…
                 </p>
-              ) : products.length === 0 ? (
+              ) : products.length ===
+                0 ? (
                 <p className="text-gray-400 text-sm">
-                  No products yet. Add your first
+                  No products yet.
+                  Add your first
                   product above.
                 </p>
               ) : (
                 <div className="space-y-2">
 
-                  {products.map((p) => (
-                    <div
-                      key={p.id}
-                      className="bg-white border border-[#E5D9D0] rounded-lg px-4 py-3 flex items-center justify-between"
-                    >
+                  {products.map(
+                    (p) => (
+                      <div
+                        key={p.id}
+                        className="bg-white border border-[#E5D9D0] rounded-lg px-4 py-3 flex items-center justify-between"
+                      >
 
-                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3">
 
-                        <div className="w-12 h-12 rounded-md overflow-hidden bg-[#F5EDE8] border border-[#E5D9D0] shrink-0">
+                          <div className="w-12 h-12 rounded-md overflow-hidden bg-[#F5EDE8] border border-[#E5D9D0] shrink-0">
 
-                          {p.image ? (
-                            <img
-                              src={p.image.split(',')[0]}
-                              alt={p.name}
-                              className="w-full h-full object-cover"
+                            {p.image ? (
+                              <img
+                                src={
+                                  p.image.split(
+                                    ","
+                                  )[0]
+                                }
+                                alt={
+                                  p.name
+                                }
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                <ImagePlus
+                                  size={
+                                    16
+                                  }
+                                />
+                              </div>
+                            )}
+
+                          </div>
+
+                          <div>
+                            <p className="font-semibold">
+                              {
+                                p.name
+                              }
+                            </p>
+
+                            <p className="text-sm text-gray-500">
+                              Rs{" "}
+                              {p.price.toLocaleString()}
+
+                              {p.compareAtPrice &&
+                              p.compareAtPrice >
+                                p.price ? (
+                                <>
+                                  {" "}
+                                  <span className="line-through text-gray-400">
+                                    Rs{" "}
+                                    {p.compareAtPrice.toLocaleString()}
+                                  </span>
+                                </>
+                              ) : null}
+
+                              {" · "}
+                              {
+                                p.category
+                              }
+
+                              {p.subcategory
+                                ? ` · ${p.subcategory}`
+                                : ""}
+                            </p>
+                          </div>
+
+                        </div>
+
+                        <div className="flex gap-2">
+
+                          <button
+                            onClick={() =>
+                              handleOpenEditProduct(
+                                p
+                              )
+                            }
+                            className="p-2 rounded hover:bg-gray-100 transition"
+                          >
+                            <Edit2
+                              size={
+                                15
+                              }
                             />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-300">
-                              <ImagePlus size={16} />
-                            </div>
-                          )}
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              handleDeleteProduct(
+                                p.id
+                              )
+                            }
+                            className="p-2 rounded hover:bg-red-50 text-red-500 transition"
+                          >
+                            <Trash2
+                              size={
+                                15
+                              }
+                            />
+                          </button>
 
                         </div>
 
-                        <div>
-                          <p className="font-semibold">
-                            {p.name}
-                          </p>
-
-                          <p className="text-sm text-gray-500">
-                            Rs{" "}
-                            {p.price.toLocaleString()}
-
-                            {p.compareAtPrice &&
-                            p.compareAtPrice >
-                              p.price ? (
-                              <>
-                                {" "}
-                                <span className="line-through text-gray-400">
-                                  Rs{" "}
-                                  {p.compareAtPrice.toLocaleString()}
-                                </span>
-                              </>
-                            ) : null}
-
-                            {" · "}
-                            {p.category}
-
-                            {p.subcategory
-                              ? ` · ${p.subcategory}`
-                              : ""}
-                          </p>
-                        </div>
-
                       </div>
-
-                      <div className="flex gap-2">
-
-                        <button
-                          onClick={() =>
-                            handleOpenEditProduct(
-                              p
-                            )
-                          }
-                          className="p-2 rounded hover:bg-gray-100 transition"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-
-                        <button
-                          onClick={() =>
-                            handleDeleteProduct(
-                              p.id
-                            )
-                          }
-                          className="p-2 rounded hover:bg-red-50 text-red-500 transition"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-
-                      </div>
-
-                    </div>
-                  ))}
+                    )
+                  )}
 
                 </div>
               )}
             </div>
           )}
 
-          {/* ORDERS */}
+          {/* =====================================================
+              ORDERS
+          ===================================================== */}
 
-          {activeTab === "orders" && (
+          {activeTab ===
+            "orders" && (
             <div>
 
-              <h1 className="text-2xl font-bold mb-6">
-                Orders
-              </h1>
+              <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+                <div>
+                  <h1 className="text-2xl font-bold">
+                    Orders
+                  </h1>
+
+                  <p className="text-sm text-gray-500 mt-1">
+                    {filteredOrders.length}{" "}
+                    of{" "}
+                    {orders.length}{" "}
+                    orders
+                  </p>
+                </div>
+
+                {/* SEARCH */}
+
+                <div className="relative w-full sm:w-96">
+                  <Search
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  />
+
+                  <input
+                    type="text"
+                    value={
+                      orderSearch
+                    }
+                    onChange={(e) =>
+                      setOrderSearch(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Search customer, phone, product, variant..."
+                    className="w-full bg-white border border-[#E5D9D0] rounded-lg pl-10 pr-10 py-2.5 text-sm outline-none focus:border-[#5B1A1A]"
+                  />
+
+                  {orderSearch && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOrderSearch(
+                          ""
+                        )
+                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                    >
+                      <X
+                        size={
+                          16
+                        }
+                      />
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {loading ? (
                 <p className="text-gray-400 text-sm animate-pulse">
                   Loading orders…
                 </p>
-              ) : orders.length === 0 ? (
+              ) : orders.length ===
+                0 ? (
                 <p className="text-gray-400 text-sm">
                   No orders yet.
                 </p>
+              ) : filteredOrders.length ===
+                0 ? (
+                <div className="bg-white border border-[#E5D9D0] rounded-lg p-8 text-center">
+                  <Search
+                    size={28}
+                    className="mx-auto text-gray-300 mb-3"
+                  />
+
+                  <p className="font-medium text-gray-600">
+                    No orders found
+                  </p>
+
+                  <p className="text-sm text-gray-400 mt-1">
+                    Try another
+                    customer,
+                    phone number,
+                    product or
+                    variant.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-3">
 
-                  {orders.map((o) => (
-                    <div
-                      key={o.id}
-                      className="bg-white border border-[#E5D9D0] rounded-lg px-4 py-4"
-                    >
+                  {filteredOrders.map(
+                    (o) => (
+                      <div
+                        key={o.id}
+                        className="bg-white border border-[#E5D9D0] rounded-lg px-4 py-4 hover:border-[#5B1A1A]/30 transition"
+                      >
 
-                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center justify-between flex-wrap gap-3">
 
-                        <div>
-                          <p className="font-semibold">
-                            {o.customerName}
-                          </p>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold">
+                                {
+                                  o.customerName
+                                }
+                              </p>
 
-                          <p className="text-sm text-gray-500">
-                            {o.phone} ·{" "}
-                            {o.city}
-                          </p>
+                              <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded">
+                                #{String(
+                                  o.id
+                                ).slice(
+                                  0,
+                                  8
+                                )}
+                              </span>
+                            </div>
 
-                          <p className="text-sm text-gray-500">
-                            Rs{" "}
-                            {o.total?.toLocaleString()}{" "}
-                            · {o.checkoutMethod}
-                          </p>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {o.phone}{" "}
+                              ·{" "}
+                              {o.city}
+                            </p>
+
+                            <p className="text-sm text-gray-500">
+                              Rs{" "}
+                              {o.total?.toLocaleString()}{" "}
+                              ·{" "}
+                              {
+                                o.checkoutMethod
+                              }
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSelectedOrder(
+                                  o
+                                )
+                              }
+                              className="flex items-center gap-1.5 px-3 py-2 border border-[#5B1A1A] text-[#5B1A1A] rounded-lg text-sm hover:bg-[#5B1A1A] hover:text-white transition"
+                            >
+                              <Eye
+                                size={
+                                  15
+                                }
+                              />
+                              Details
+                            </button>
+
+                            <select
+                              value={
+                                o.status
+                              }
+                              onChange={(
+                                e
+                              ) =>
+                                handleUpdateOrderStatus(
+                                  o.id,
+                                  e
+                                    .target
+                                    .value
+                                )
+                              }
+                              className="border border-gray-200 rounded px-3 py-2 text-sm bg-white"
+                            >
+                              <option>
+                                Pending
+                              </option>
+
+                              <option>
+                                Shipped
+                              </option>
+
+                              <option>
+                                Delivered
+                              </option>
+
+                              <option>
+                                Cancelled
+                              </option>
+                            </select>
+
+                          </div>
+
                         </div>
 
-                        <select
-                          value={o.status}
-                          onChange={(e) =>
-                            handleUpdateOrderStatus(
-                              o.id,
-                              e.target.value
-                            )
-                          }
-                          className="border border-gray-200 rounded px-3 py-1 text-sm bg-white"
-                        >
-                          <option>
-                            Pending
-                          </option>
-                          <option>
-                            Shipped
-                          </option>
-                          <option>
-                            Delivered
-                          </option>
-                          <option>
-                            Cancelled
-                          </option>
-                        </select>
+                        {/* ORDER ITEMS */}
 
-                      </div>
+                        {o.order_items &&
+                          o.order_items
+                            .length >
+                            0 && (
+                            <div className="mt-3 border-t pt-3">
 
-                      {(o.order_items || [])
-                        .length > 0 && (
-                        <ul className="mt-3 border-t pt-2 text-xs text-gray-500 space-y-1">
+                              <div className="space-y-2">
 
-                          {(o.order_items || []).map(
-                            (item) => (
-                              <li key={item.id}>
-                                {item.name} ×{" "}
-                                {item.quantity} — Rs{" "}
-                                {item.price}
-                              </li>
-                            )
+                                {o.order_items.map(
+                                  (
+                                    item
+                                  ) => {
+                                    const variantText =
+                                      formatVariantOptions(
+                                        item.variant_options
+                                      );
+
+                                    return (
+                                      <div
+                                        key={
+                                          item.id
+                                        }
+                                        className="flex items-start justify-between gap-4 text-sm"
+                                      >
+                                        <div>
+                                          <p className="font-medium text-gray-700">
+                                            {
+                                              item.name
+                                            }{" "}
+                                            ×{" "}
+                                            {
+                                              item.quantity
+                                            }
+                                          </p>
+
+                                          {variantText ? (
+                                            <p className="text-xs text-[#5B1A1A] mt-0.5">
+                                              {
+                                                variantText
+                                              }
+                                            </p>
+                                          ) : (
+                                            <p className="text-xs text-gray-400 mt-0.5">
+                                              No variant
+                                            </p>
+                                          )}
+                                        </div>
+
+                                        <p className="text-gray-600 whitespace-nowrap">
+                                          Rs{" "}
+                                          {(
+                                            Number(
+                                              item.price
+                                            ) *
+                                            Number(
+                                              item.quantity
+                                            )
+                                          ).toLocaleString()}
+                                        </p>
+                                      </div>
+                                    );
+                                  }
+                                )}
+
+                              </div>
+                            </div>
                           )}
 
-                        </ul>
-                      )}
-
-                    </div>
-                  ))}
+                      </div>
+                    )
+                  )}
 
                 </div>
               )}
@@ -1864,6 +2386,287 @@ const handleUpdateProduct = async () => {
 
         </main>
       </div>
+
+      {/* =====================================================
+          ORDER DETAILS MODAL
+      ===================================================== */}
+
+      {selectedOrder && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]"
+          onClick={() =>
+            setSelectedOrder(null)
+          }
+        >
+
+          <div
+            className="bg-white rounded-xl w-full max-w-3xl shadow-2xl max-h-[90vh] overflow-hidden"
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+          >
+
+            {/* MODAL HEADER */}
+
+            <div className="bg-[#5B1A1A] text-white px-5 py-4 flex items-center justify-between">
+
+              <div>
+                <p className="text-xs opacity-70">
+                  ORDER
+                </p>
+
+                <h2 className="text-lg font-bold">
+                  #{selectedOrder.id}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setSelectedOrder(
+                    null
+                  )
+                }
+                className="p-2 rounded-lg hover:bg-white/10 transition"
+              >
+                <X size={20} />
+              </button>
+
+            </div>
+
+            {/* MODAL BODY */}
+
+            <div className="p-5 overflow-y-auto max-h-[calc(90vh-72px)]">
+
+              {/* ORDER INFO */}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+
+                <div className="border rounded-lg p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">
+                    Customer
+                  </p>
+
+                  <p className="font-semibold text-gray-800">
+                    {
+                      selectedOrder.customerName
+                    }
+                  </p>
+
+                  <p className="text-sm text-gray-600 mt-1">
+                    {
+                      selectedOrder.phone
+                    }
+                  </p>
+                </div>
+
+                <div className="border rounded-lg p-4">
+                  <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">
+                    Order Date
+                  </p>
+
+                  <p className="font-medium text-gray-800">
+                    {formatOrderDate(
+                      selectedOrder.created_at
+                    )}
+                  </p>
+
+                  <p className="text-sm text-gray-600 mt-1">
+                    {
+                      selectedOrder.checkoutMethod
+                    }
+                  </p>
+                </div>
+
+                <div className="border rounded-lg p-4 sm:col-span-2">
+                  <p className="text-xs uppercase tracking-wide text-gray-400 mb-2">
+                    Delivery Address
+                  </p>
+
+                  <p className="font-medium text-gray-800">
+                    {
+                      selectedOrder.address
+                    }
+                  </p>
+
+                  <p className="text-sm text-gray-600 mt-1">
+                    {
+                      selectedOrder.city
+                    }
+                  </p>
+                </div>
+
+              </div>
+
+              {/* STATUS */}
+
+              <div className="flex items-center justify-between gap-3 border rounded-lg p-4 mb-5">
+
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-gray-400">
+                    Order Status
+                  </p>
+
+                  <p className="text-sm text-gray-500 mt-1">
+                    Update the current
+                    order status.
+                  </p>
+                </div>
+
+                <select
+                  value={
+                    selectedOrder.status
+                  }
+                  onChange={(e) =>
+                    handleUpdateOrderStatus(
+                      selectedOrder.id,
+                      e.target.value
+                    )
+                  }
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white font-medium"
+                >
+                  <option>
+                    Pending
+                  </option>
+
+                  <option>
+                    Shipped
+                  </option>
+
+                  <option>
+                    Delivered
+                  </option>
+
+                  <option>
+                    Cancelled
+                  </option>
+                </select>
+
+              </div>
+
+              {/* ITEMS */}
+
+              <div className="border rounded-xl overflow-hidden">
+
+                <div className="bg-gray-50 border-b px-4 py-3">
+                  <h3 className="font-semibold text-gray-800">
+                    Ordered Products
+                  </h3>
+                </div>
+
+                {selectedOrder
+                  .order_items
+                  .length ===
+                0 ? (
+                  <div className="p-5 text-sm text-gray-400">
+                    No order items
+                    found.
+                  </div>
+                ) : (
+                  <div className="divide-y">
+
+                    {selectedOrder.order_items.map(
+                      (item) => {
+                        const variantText =
+                          formatVariantOptions(
+                            item.variant_options
+                          );
+
+                        const lineTotal =
+                          Number(
+                            item.price
+                          ) *
+                          Number(
+                            item.quantity
+                          );
+
+                        return (
+                          <div
+                            key={
+                              item.id
+                            }
+                            className="p-4"
+                          >
+
+                            <div className="flex items-start justify-between gap-4">
+
+                              <div className="min-w-0">
+
+                                <p className="font-semibold text-gray-800">
+                                  {
+                                    item.name
+                                  }
+                                </p>
+
+                                <p className="text-sm text-gray-500 mt-1">
+                                  Quantity:{" "}
+                                  {
+                                    item.quantity
+                                  }
+                                </p>
+
+                                {variantText ? (
+                                  <div className="mt-2 inline-block bg-[#F5EDE8] text-[#5B1A1A] rounded-md px-2.5 py-1.5 text-xs font-medium">
+                                    {
+                                      variantText
+                                    }
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-400 mt-2">
+                                    No variant
+                                    selected
+                                  </p>
+                                )}
+
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <p className="text-xs text-gray-400">
+                                  Rs{" "}
+                                  {Number(
+                                    item.price
+                                  ).toLocaleString()}{" "}
+                                  ×{" "}
+                                  {
+                                    item.quantity
+                                  }
+                                </p>
+
+                                <p className="font-semibold text-gray-800 mt-1">
+                                  Rs{" "}
+                                  {lineTotal.toLocaleString()}
+                                </p>
+                              </div>
+
+                            </div>
+
+                          </div>
+                        );
+                      }
+                    )}
+
+                  </div>
+                )}
+
+                {/* TOTAL */}
+
+                <div className="border-t bg-[#FAF7F4] px-4 py-4 flex items-center justify-between">
+                  <p className="font-semibold text-gray-700">
+                    Order Total
+                  </p>
+
+                  <p className="text-xl font-bold text-[#5B1A1A]">
+                    Rs{" "}
+                    {selectedOrder.total.toLocaleString()}
+                  </p>
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =====================================================
           ADD PRODUCT MODAL
@@ -1888,23 +2691,55 @@ const handleUpdateProduct = async () => {
                 </label>
 
                 <div className="flex flex-wrap gap-2 mb-2">
-                    {addImagePreviews.map((preview, idx) => (
-                      <div key={idx} className="relative w-24 h-24 border rounded-md overflow-hidden">
-                        <img src={preview} alt="Preview" className="w-full h-full object-cover" />
-                        <button type="button" onClick={(e) => removeAddImage(idx, e)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">x</button>
+                  {addImagePreviews.map(
+                    (
+                      preview,
+                      idx
+                    ) => (
+                      <div
+                        key={idx}
+                        className="relative w-24 h-24 border rounded-md overflow-hidden"
+                      >
+                        <img
+                          src={
+                            preview
+                          }
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={(
+                            e
+                          ) =>
+                            removeAddImage(
+                              idx,
+                              e
+                            )
+                          }
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                        >
+                          x
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                  <div
+                    )
+                  )}
+                </div>
+
+                <div
                   onClick={() =>
                     addFileInputRef.current?.click()
                   }
                   className="w-full h-24 rounded-md border-2 border-dashed border-[#E5D9D0] bg-[#FAF7F4] flex items-center justify-center cursor-pointer overflow-hidden hover:border-[#5B1A1A]/40 transition relative"
                 >
                   <div className="flex flex-col items-center text-gray-400 text-xs gap-1">
-                    <ImagePlus size={22} />
+                    <ImagePlus
+                      size={22}
+                    />
                     <span>
-                      Click to upload images
+                      Click to upload
+                      images
                     </span>
                   </div>
 
@@ -1919,7 +2754,9 @@ const handleUpdateProduct = async () => {
                 </div>
 
                 <input
-                  ref={addFileInputRef}
+                  ref={
+                    addFileInputRef
+                  }
                   type="file"
                   accept="image/*"
                   multiple
@@ -1939,7 +2776,9 @@ const handleUpdateProduct = async () => {
 
                 <input
                   className="w-full border rounded-md px-3 py-2 text-sm"
-                  value={productForm.name}
+                  value={
+                    productForm.name
+                  }
                   onChange={(e) =>
                     setProductForm({
                       ...productForm,
@@ -1986,7 +2825,9 @@ const handleUpdateProduct = async () => {
                   <input
                     type="number"
                     min="0"
-                    value={productForm.price}
+                    value={
+                      productForm.price
+                    }
                     onChange={(e) =>
                       setProductForm({
                         ...productForm,
@@ -2010,13 +2851,16 @@ const handleUpdateProduct = async () => {
 
                 <select
                   className="w-full border rounded-md px-3 py-2 text-sm"
-                  value={productForm.category}
+                  value={
+                    productForm.category
+                  }
                   onChange={(e) =>
                     setProductForm({
                       ...productForm,
                       category:
                         e.target.value,
-                      subcategory: "",
+                      subcategory:
+                        "",
                     })
                   }
                 >
@@ -2078,10 +2922,17 @@ const handleUpdateProduct = async () => {
                     Object.entries(
                       subcategoryOptions.makeup
                     ).map(
-                      ([group, items]) => (
+                      ([
+                        group,
+                        items,
+                      ]) => (
                         <optgroup
-                          key={group}
-                          label={group}
+                          key={
+                            group
+                          }
+                          label={
+                            group
+                          }
                         >
                           {items.map(
                             ([
@@ -2089,10 +2940,16 @@ const handleUpdateProduct = async () => {
                               value,
                             ]) => (
                               <option
-                                key={value}
-                                value={value}
+                                key={
+                                  value
+                                }
+                                value={
+                                  value
+                                }
                               >
-                                {label}
+                                {
+                                  label
+                                }
                               </option>
                             )
                           )}
@@ -2105,10 +2962,17 @@ const handleUpdateProduct = async () => {
                     Object.entries(
                       subcategoryOptions.skincare
                     ).map(
-                      ([group, items]) => (
+                      ([
+                        group,
+                        items,
+                      ]) => (
                         <optgroup
-                          key={group}
-                          label={group}
+                          key={
+                            group
+                          }
+                          label={
+                            group
+                          }
                         >
                           {items.map(
                             ([
@@ -2116,10 +2980,16 @@ const handleUpdateProduct = async () => {
                               value,
                             ]) => (
                               <option
-                                key={value}
-                                value={value}
+                                key={
+                                  value
+                                }
+                                value={
+                                  value
+                                }
                               >
-                                {label}
+                                {
+                                  label
+                                }
                               </option>
                             )
                           )}
@@ -2169,9 +3039,10 @@ const handleUpdateProduct = async () => {
                   onChange={(e) =>
                     setProductForm({
                       ...productForm,
-                      inventory: Number(
-                        e.target.value
-                      ),
+                      inventory:
+                        Number(
+                          e.target.value
+                        ),
                     })
                   }
                 />
@@ -2183,24 +3054,30 @@ const handleUpdateProduct = async () => {
 
             </div>
 
-            {/* BUTTONS */}
-
             <div className="flex justify-end gap-2 mt-5">
 
               <button
                 onClick={() => {
                   resetAddModalState();
-                  setShowAddModal(false);
+                  setShowAddModal(
+                    false
+                  );
                 }}
                 className="px-4 py-2 text-sm rounded-md border hover:bg-gray-50"
-                disabled={addUploading}
+                disabled={
+                  addUploading
+                }
               >
                 Cancel
               </button>
 
               <button
-                onClick={handleAddProduct}
-                disabled={addUploading}
+                onClick={
+                  handleAddProduct
+                }
+                disabled={
+                  addUploading
+                }
                 className="px-4 py-2 text-sm rounded-md bg-[#5B1A1A] text-white hover:bg-[#7A2323] disabled:opacity-60 flex items-center gap-2"
               >
                 {addUploading && (
@@ -2245,18 +3122,83 @@ const handleUpdateProduct = async () => {
                   </label>
 
                   <div className="flex flex-wrap gap-2 mb-2">
-                    {selectedProduct.image && selectedProduct.image.split(',').filter(Boolean).map((url, idx) => (
-                      <div key={`existing-${idx}`} className="relative w-24 h-24 border rounded-md overflow-hidden">
-                        <img src={url} alt="Existing" className="w-full h-full object-cover" />
-                        <button type="button" onClick={(e) => removeExistingEditImage(url, e)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">x</button>
-                      </div>
-                    ))}
-                    {editImagePreviews.map((preview, idx) => (
-                      <div key={`new-${idx}`} className="relative w-24 h-24 border rounded-md overflow-hidden">
-                        <img src={preview} alt="New Preview" className="w-full h-full object-cover" />
-                        <button type="button" onClick={(e) => removeEditImage(idx, e)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">x</button>
-                      </div>
-                    ))}
+
+                    {selectedProduct.image &&
+                      selectedProduct.image
+                        .split(",")
+                        .filter(
+                          Boolean
+                        )
+                        .map(
+                          (
+                            url,
+                            idx
+                          ) => (
+                            <div
+                              key={`existing-${idx}`}
+                              className="relative w-24 h-24 border rounded-md overflow-hidden"
+                            >
+                              <img
+                                src={
+                                  url
+                                }
+                                alt="Existing"
+                                className="w-full h-full object-cover"
+                              />
+
+                              <button
+                                type="button"
+                                onClick={(
+                                  e
+                                ) =>
+                                  removeExistingEditImage(
+                                    url,
+                                    e
+                                  )
+                                }
+                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                              >
+                                x
+                              </button>
+                            </div>
+                          )
+                        )}
+
+                    {editImagePreviews.map(
+                      (
+                        preview,
+                        idx
+                      ) => (
+                        <div
+                          key={`new-${idx}`}
+                          className="relative w-24 h-24 border rounded-md overflow-hidden"
+                        >
+                          <img
+                            src={
+                              preview
+                            }
+                            alt="New Preview"
+                            className="w-full h-full object-cover"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={(
+                              e
+                            ) =>
+                              removeEditImage(
+                                idx,
+                                e
+                              )
+                            }
+                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                          >
+                            x
+                          </button>
+                        </div>
+                      )
+                    )}
+
                   </div>
 
                   <div
@@ -2266,9 +3208,13 @@ const handleUpdateProduct = async () => {
                     className="w-full h-24 rounded-md border-2 border-dashed border-[#E5D9D0] bg-[#FAF7F4] flex items-center justify-center cursor-pointer overflow-hidden hover:border-[#5B1A1A]/40 transition relative"
                   >
                     <div className="flex flex-col items-center text-gray-400 text-xs gap-1">
-                      <ImagePlus size={22} />
+                      <ImagePlus
+                        size={22}
+                      />
+
                       <span>
-                        Click to add more images
+                        Click to add
+                        more images
                       </span>
                     </div>
 
@@ -2283,7 +3229,9 @@ const handleUpdateProduct = async () => {
                   </div>
 
                   <input
-                    ref={editFileInputRef}
+                    ref={
+                      editFileInputRef
+                    }
                     type="file"
                     accept="image/*"
                     multiple
@@ -2317,23 +3265,27 @@ const handleUpdateProduct = async () => {
 
                 {/* DESCRIPTION */}
 
-<div>
-  <label className="block text-sm font-medium mb-1">
-    Description
-  </label>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Description
+                  </label>
 
-  <textarea
-    className="w-full border rounded-md px-3 py-2 text-sm min-h-[120px]"
-    value={selectedProduct.description ?? ""}
-    onChange={(e) =>
-      setSelectedProduct({
-        ...selectedProduct,
-        description: e.target.value,
-      })
-    }
-    placeholder="Full product description"
-  />
-</div>
+                  <textarea
+                    className="w-full border rounded-md px-3 py-2 text-sm min-h-[120px]"
+                    value={
+                      selectedProduct.description ??
+                      ""
+                    }
+                    onChange={(e) =>
+                      setSelectedProduct({
+                        ...selectedProduct,
+                        description:
+                          e.target.value,
+                      })
+                    }
+                    placeholder="Full product description"
+                  />
+                </div>
 
                 {/* PRICE */}
 
@@ -2407,9 +3359,10 @@ const handleUpdateProduct = async () => {
                     onChange={(e) =>
                       setSelectedProduct({
                         ...selectedProduct,
-                        inventory: Number(
-                          e.target.value
-                        ),
+                        inventory:
+                          Number(
+                            e.target.value
+                          ),
                       })
                     }
                   />
@@ -2488,10 +3441,17 @@ const handleUpdateProduct = async () => {
                       Object.entries(
                         subcategoryOptions.makeup
                       ).map(
-                        ([group, items]) => (
+                        ([
+                          group,
+                          items,
+                        ]) => (
                           <optgroup
-                            key={group}
-                            label={group}
+                            key={
+                              group
+                            }
+                            label={
+                              group
+                            }
                           >
                             {items.map(
                               ([
@@ -2499,10 +3459,16 @@ const handleUpdateProduct = async () => {
                                 value,
                               ]) => (
                                 <option
-                                  key={value}
-                                  value={value}
+                                  key={
+                                    value
+                                  }
+                                  value={
+                                    value
+                                  }
                                 >
-                                  {label}
+                                  {
+                                    label
+                                  }
                                 </option>
                               )
                             )}
@@ -2515,10 +3481,17 @@ const handleUpdateProduct = async () => {
                       Object.entries(
                         subcategoryOptions.skincare
                       ).map(
-                        ([group, items]) => (
+                        ([
+                          group,
+                          items,
+                        ]) => (
                           <optgroup
-                            key={group}
-                            label={group}
+                            key={
+                              group
+                            }
+                            label={
+                              group
+                            }
                           >
                             {items.map(
                               ([
@@ -2526,10 +3499,16 @@ const handleUpdateProduct = async () => {
                                 value,
                               ]) => (
                                 <option
-                                  key={value}
-                                  value={value}
+                                  key={
+                                    value
+                                  }
+                                  value={
+                                    value
+                                  }
                                 >
-                                  {label}
+                                  {
+                                    label
+                                  }
                                 </option>
                               )
                             )}
@@ -2553,20 +3532,33 @@ const handleUpdateProduct = async () => {
                   onClick={() => {
                     resetEditModalState();
 
-                    setVariantGroups([]);
-                    setVariantCombinations([]);
+                    setVariantGroups(
+                      []
+                    );
 
-                    setShowEditModal(false);
+                    setVariantCombinations(
+                      []
+                    );
+
+                    setShowEditModal(
+                      false
+                    );
                   }}
                   className="px-4 py-2 text-sm rounded-md border hover:bg-gray-50"
-                  disabled={editUploading}
+                  disabled={
+                    editUploading
+                  }
                 >
                   Cancel
                 </button>
 
                 <button
-                  onClick={handleUpdateProduct}
-                  disabled={editUploading}
+                  onClick={
+                    handleUpdateProduct
+                  }
+                  disabled={
+                    editUploading
+                  }
                   className="px-4 py-2 text-sm rounded-md bg-[#5B1A1A] text-white hover:bg-[#7A2323] disabled:opacity-60 flex items-center gap-2"
                 >
                   {editUploading && (
