@@ -197,7 +197,11 @@ export default function AdminPortal() {
 
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-
+ // PRODUCT SEARCH & FILTER
+const [productSearch, setProductSearch] = useState("");
+const [productFilter, setProductFilter] = useState<
+  "all" | "soldOut" | "lowStock"
+>("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -442,7 +446,31 @@ export default function AdminPortal() {
 
     return searchableText.includes(query);
   });
+const filteredProducts = products.filter((product) => {
+  const query = productSearch.trim().toLowerCase();
 
+  const searchableText = [
+    product.name,
+    product.category,
+    product.subcategory,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const matchesSearch =
+    !query || searchableText.includes(query);
+
+  const inventory = Number(product.inventory) || 0;
+
+  const matchesFilter =
+    productFilter === "all"
+      ? true
+      : productFilter === "soldOut"
+      ? inventory === 0
+      : inventory > 0 && inventory < 3;
+
+  return matchesSearch && matchesFilter;
+});
   // =========================================================
   // IMAGE HANDLERS
   // =========================================================
@@ -1963,39 +1991,155 @@ export default function AdminPortal() {
             "products" && (
             <div>
 
-              <div className="flex items-center justify-between mb-6">
-                <h1 className="text-2xl font-bold">
-                  Products
-                </h1>
+            <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+  <div>
+    <h1 className="text-2xl font-bold">
+      Products
+    </h1>
 
-                <button
-                  onClick={() => {
-                    resetAddModalState();
-                    setShowAddModal(
-                      true
-                    );
-                  }}
-                  className="bg-[#5B1A1A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#7A2323] transition"
-                >
-                  + Add Product
-                </button>
-              </div>
+    <p className="text-sm text-gray-500 mt-1">
+      {filteredProducts.length} of {products.length} products
+    </p>
+  </div>
 
+  <button
+    onClick={() => {
+      resetAddModalState();
+      setShowAddModal(true);
+    }}
+    className="bg-[#5B1A1A] text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-[#7A2323] transition"
+  >
+    + Add Product
+  </button>
+</div>
+{/* PRODUCT SEARCH & FILTERS */}
+
+<div className="bg-white border border-[#E5D9D0] rounded-lg p-4 mb-5">
+  <div className="flex flex-col lg:flex-row gap-3">
+    
+    {/* SEARCH */}
+
+    <div className="relative flex-1">
+      <Search
+        size={18}
+        className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+      />
+
+      <input
+        type="text"
+        value={productSearch}
+        onChange={(e) =>
+          setProductSearch(e.target.value)
+        }
+        placeholder="Search products, category, subcategory..."
+        className="w-full bg-white border border-[#E5D9D0] rounded-lg pl-10 pr-10 py-2.5 text-sm outline-none focus:border-[#5B1A1A]"
+      />
+
+      {productSearch && (
+        <button
+          type="button"
+          onClick={() => setProductSearch("")}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+        >
+          <X size={16} />
+        </button>
+      )}
+    </div>
+
+    {/* FILTER BUTTONS */}
+
+    <div className="flex gap-2 flex-wrap">
+
+      <button
+        type="button"
+        onClick={() => setProductFilter("all")}
+        className={`px-4 py-2.5 rounded-lg text-sm font-medium border transition ${
+          productFilter === "all"
+            ? "bg-[#5B1A1A] text-white border-[#5B1A1A]"
+            : "bg-white text-gray-600 border-[#E5D9D0] hover:bg-[#F5EDE8]"
+        }`}
+      >
+        All ({products.length})
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setProductFilter("soldOut")}
+        className={`px-4 py-2.5 rounded-lg text-sm font-medium border transition ${
+          productFilter === "soldOut"
+            ? "bg-red-600 text-white border-red-600"
+            : "bg-white text-gray-600 border-[#E5D9D0] hover:bg-red-50"
+        }`}
+      >
+        Sold Out (
+        {
+          products.filter(
+            (p) => (Number(p.inventory) || 0) === 0
+          ).length
+        }
+        )
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setProductFilter("lowStock")}
+        className={`px-4 py-2.5 rounded-lg text-sm font-medium border transition ${
+          productFilter === "lowStock"
+            ? "bg-amber-600 text-white border-amber-600"
+            : "bg-white text-gray-600 border-[#E5D9D0] hover:bg-amber-50"
+        }`}
+      >
+        Low Stock (
+        {
+          products.filter((p) => {
+            const inventory = Number(p.inventory) || 0;
+            return inventory > 0 && inventory < 3;
+          }).length
+        }
+        )
+      </button>
+
+    </div>
+  </div>
+</div>
               {loading ? (
                 <p className="text-gray-400 text-sm animate-pulse">
                   Loading products…
                 </p>
-              ) : products.length ===
-                0 ? (
-                <p className="text-gray-400 text-sm">
-                  No products yet.
-                  Add your first
-                  product above.
-                </p>
-              ) : (
-                <div className="space-y-2">
+             ) : products.length === 0 ? (
+  <p className="text-gray-400 text-sm">
+    No products yet. Add your first product above.
+  </p>
+) : filteredProducts.length === 0 ? (
+  <div className="bg-white border border-[#E5D9D0] rounded-lg p-8 text-center">
+    <Search
+      size={28}
+      className="mx-auto text-gray-300 mb-3"
+    />
 
-                  {products.map(
+    <p className="font-medium text-gray-600">
+      No products found
+    </p>
+
+    <p className="text-sm text-gray-400 mt-1">
+      Try another search or filter.
+    </p>
+
+    <button
+      type="button"
+      onClick={() => {
+        setProductSearch("");
+        setProductFilter("all");
+      }}
+      className="mt-4 text-sm font-medium text-[#5B1A1A] hover:underline"
+    >
+      Clear search & filters
+    </button>
+  </div>
+) : (
+  <div className="space-y-2">
+
+                  {filteredProducts.map(
                     (p) => (
                       <div
                         key={p.id}
@@ -2037,31 +2181,44 @@ export default function AdminPortal() {
                               }
                             </p>
 
-                            <p className="text-sm text-gray-500">
-                              Rs{" "}
-                              {p.price.toLocaleString()}
+                           <p className="text-sm text-gray-500">
+  Rs{" "}
+  {p.price.toLocaleString()}
 
-                              {p.compareAtPrice &&
-                              p.compareAtPrice >
-                                p.price ? (
-                                <>
-                                  {" "}
-                                  <span className="line-through text-gray-400">
-                                    Rs{" "}
-                                    {p.compareAtPrice.toLocaleString()}
-                                  </span>
-                                </>
-                              ) : null}
+  {p.compareAtPrice &&
+  p.compareAtPrice > p.price ? (
+    <>
+      {" "}
+      <span className="line-through text-gray-400">
+        Rs{" "}
+        {p.compareAtPrice.toLocaleString()}
+      </span>
+    </>
+  ) : null}
 
-                              {" · "}
-                              {
-                                p.category
-                              }
+  {" · "}
+  {p.category}
 
-                              {p.subcategory
-                                ? ` · ${p.subcategory}`
-                                : ""}
-                            </p>
+  {p.subcategory
+    ? ` · ${p.subcategory}`
+    : ""}
+</p>
+
+<div className="mt-1">
+  {(Number(p.inventory) || 0) === 0 ? (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-50 text-red-600">
+      Sold Out
+    </span>
+  ) : Number(p.inventory) < 3 ? (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">
+      Only {p.inventory} left
+    </span>
+  ) : (
+    <span className="text-[11px] text-gray-400">
+      {p.inventory} in stock
+    </span>
+  )}
+</div>
                           </div>
 
                         </div>
